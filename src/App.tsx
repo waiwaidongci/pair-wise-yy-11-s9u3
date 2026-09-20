@@ -1,128 +1,78 @@
+import { useCallback, useEffect, useState } from "react";
 import "./styles.css";
+import { buildSeed } from "./domain/seed";
+import { store } from "./store/appStore";
+import { useStoreState, type Transition, type TransitionResult } from "./store/createStore";
+import MetricsBar from "./components/MetricsBar";
+import BatchPanel from "./components/BatchPanel";
+import CylinderPanel from "./components/CylinderPanel";
+import StationPanel from "./components/StationPanel";
+import QueuePanel from "./components/QueuePanel";
+import OrderForm from "./components/OrderForm";
+import ReviewPanel from "./components/ReviewPanel";
+import SignedPanel from "./components/SignedPanel";
+import HistoryPanel from "./components/HistoryPanel";
 
-const project = {
-  "sourceNo": 5,
-  "id": "hxyfront-62010",
-  "port": 62010,
-  "title": "潜水气瓶充填记录",
-  "domain": "潜水气瓶充填",
-  "prompt": "我想做一个给潜水店使用的气瓶充填前端系统，工作人员可以记录气瓶编号、容积、检验有效期、残压、目标压力、氧含量、氦含量、充填方式和操作员。页面需要有待充填队列、混合气比例提示、气瓶检验过期提醒、充填完成签收和单个气瓶历史记录。",
-  "palette": [
-    "#075985",
-    "#0d9488",
-    "#f59e0b"
-  ],
-  "metrics": [
-    "待充填",
-    "过期提醒",
-    "平均氧含量",
-    "签收单"
-  ],
-  "filters": [
-    "空气",
-    "高氧",
-    "Trimix",
-    "待检验"
-  ],
-  "fields": [
-    "气瓶编号",
-    "容积",
-    "检验有效期",
-    "残压",
-    "目标压力",
-    "氧含量"
-  ],
-  "records": [
-    [
-      "TANK-204",
-      "12L铝瓶",
-      "残压55bar，目标200bar",
-      "空气充填"
-    ],
-    [
-      "TANK-219",
-      "11L钢瓶",
-      "EAN32",
-      "待客户签收"
-    ],
-    [
-      "TANK-231",
-      "双瓶组",
-      "检验期剩余12天",
-      "标记提醒"
-    ]
-  ]
-};
+export default function App() {
+  const state = useStoreState(store);
+  const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
 
-function App() {
+  const run = useCallback((t: Transition): TransitionResult => {
+    const r = store.dispatch(t);
+    setToast({ text: r.message, ok: r.ok });
+    return r;
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 3800);
+    return () => window.clearTimeout(id);
+  }, [toast]);
+
   return (
     <main className="app">
       <section className="hero">
-        <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
-        <h1>{project.title}</h1>
-        <span>{project.prompt}</span>
+        <div className="hero-actions">
+          <button
+            className="ghost"
+            onClick={() => {
+              store.replace(buildSeed(new Date()));
+              setToast({ text: "已重置为演示数据", ok: true });
+            }}
+          >
+            重置演示数据
+          </button>
+        </div>
+        <p>hxyfront-62010 · 潜水气瓶充填 · 工位闭环</p>
+        <h1>潜水气瓶充填记录</h1>
+        <span>
+          编号唯一；检验过期、耐压不足或余气冲突禁止开工，仅可排空或送检；一工位一瓶，开工锁定气瓶、操作员与气源批次；气源失效即暂停，换合格批次重验后续充；实测超限只留档转复核且复核不改实测；签收后换配气单即失效回队列。队列、工位、历史同源持久化，刷新后一致。
+        </span>
       </section>
 
-      <section className="metrics">
-        {project.metrics.map((metric: string, index: number) => (
-          <article key={metric}>
-            <small>{metric}</small>
-            <strong>{[28, 6, 14, 91][index] ?? 10}</strong>
-          </article>
-        ))}
-      </section>
+      <MetricsBar state={state} />
 
       <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}分类</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
+        <aside className="side-col">
+          <BatchPanel state={state} run={run} />
+          <CylinderPanel state={state} run={run} />
         </aside>
-
-        <section className="panel form-panel">
-          <div className="heading">
-            <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
-            </div>
-            <button className="primary">保存记录</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="panel">
-        <div className="heading">
-          <div>
-            <p>近期记录</p>
-            <h2>工作台摘要</h2>
-          </div>
-          <button>导出CSV</button>
-        </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
+        <div className="side-col">
+          <StationPanel state={state} run={run} />
+          <QueuePanel state={state} run={run} />
         </div>
       </section>
+
+      <OrderForm state={state} run={run} />
+
+      <section className="grid-2">
+        <ReviewPanel state={state} run={run} />
+        <SignedPanel state={state} run={run} />
+      </section>
+
+      <HistoryPanel state={state} run={run} />
+
+      {toast && <div className={`toast ${toast.ok ? "toast-ok" : "toast-err"}`}>{toast.text}</div>}
     </main>
   );
 }
-
-export default App;
